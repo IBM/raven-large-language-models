@@ -1,0 +1,11 @@
+model:
+  name: "meta-llama/Meta-Llama-3-70B"
+  disentangled: true
+  classmode: 'pred'
+  incontext: 16
+  gridsearch: false
+  nreturn: 7
+  temperature: 0.4
+  sampling: true
+  prompt: "Complete the Raven's progressive matrix:"
+  prefix: ""

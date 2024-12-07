@@ -1,0 +1,4 @@
+seed: 1234
+path:
+  base: results/
+  full: ''

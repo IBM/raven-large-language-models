@@ -1,0 +1,11 @@
+data:
+  path: data/
+  dataset: iraven
+  config: 'center_single'
+  ntest: 500
+  nattr: 3
+  gridsize: 3
+  nshow: 3
+  angle: false
+  ood_set_attr: #"Arithmetic" #"Distribute_Three"  "Constant"  "Progression"
+  ood_set_rule: #"Size" #"Color" # "Type"

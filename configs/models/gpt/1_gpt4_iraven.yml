@@ -1,0 +1,13 @@
+model:
+  name: "gpt-4"
+  disentangled: true
+  classmode: 'pred'
+  incontext: 0
+  gridsearch: false
+  nreturn: 7
+  temperature: 0.5
+  sampling: false
+  api_key: "" # add your openai API key here
+  or_key: "" # add your openai ORG here
+  prompt: "Complete the Raven's progressive matrix:"
+  prefix: "Only return the missing numbers!\n"

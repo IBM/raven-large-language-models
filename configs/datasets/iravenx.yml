@@ -1,0 +1,11 @@
+data:
+  path: data/
+  dataset: iravenx
+  config: 'center_single_shuffle_n_10_maxval_1000'
+  gridsize: 10
+  nshow: 3
+  ntest: 500
+  nattr: 3
+  angle: false
+  ood_set_attr:
+  ood_set_rule:
