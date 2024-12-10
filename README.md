@@ -1,6 +1,6 @@
 # Towards Learning to Reason: Comparing LLMs with Neuro-Symbolic on Arithmetic Relations in Abstract Reasoning
 
-### Michael Hersche, Giacomo Camposampiero, Roger Wattenhofer, Abu Sebastian and Abbas Rahimi [[Paper]]()
+### Michael Hersche, Giacomo Camposampiero, Roger Wattenhofer, Abu Sebastian and Abbas Rahimi [[Paper]](https://arxiv.org/abs/2412.05586)
 
 <div align="center">
   <img src='figs/main_figure.png' width="90%"/>
@@ -69,7 +69,7 @@ If you use the work released here for your research, please consider citing our 
 @article{hersche2024_rpm_llm_nesy,
   title={Towards Learning Abductive Reasoning using VSA Distributed Representations},
   author={Hersche, Michael and Camposampiero, Giacomo and Wattenhofer, Roger and Sebastian, Abu and Rahimi, Abbas},
-  journal={arXiv preprint arXiv:XXXX.XXXXX},
+  journal={arXiv preprint arXiv:2412.05586},
   year={2024}
 }
 ```
