@@ -30,15 +30,21 @@ def majority_vote(pred_array) -> np.array:
     return np.squeeze(maj.data)
 
 
-def text2num(text, nattr, nreturn) -> np.array:
+def text2num(text, nattr, nreturn, answer_queue="") -> np.array:
     """
     Extract the predicted attributes from textual LLM output
     """
     pred_array = np.zeros((nreturn, nattr))
     pred_array[:] = np.nan
     for i, pred_text in enumerate(text):
+        # import pdb; pdb.set_trace()
+        if (answer_queue != "") and (answer_queue in pred_text):
+            extracted_string = pred_text.split(answer_queue, 1)[1]
+        else:
+            extracted_string = pred_text
+
         pred_num = np.array(
-            [float(s) for s in re.findall(r"[-+]?(?:\d*\.*\d+)", pred_text)]
+            [float(s) for s in re.findall(r"[-+]?(?:\d*\.*\d+)", extracted_string)]
         )
         if pred_num.shape[0] >= nattr:
             pred_array[i, :] = pred_num[:nattr]
@@ -64,7 +70,17 @@ class Solver_pred(Solver):
         self.prompt = cfg.model.prompt
         self.prefix = cfg.model.prefix
 
-    def _split(self, sample, config, incontext_samples, n=3, nshow=3, add_angle=False):
+    def _split(
+        self,
+        sample,
+        config,
+        incontext_samples,
+        n=3,
+        nshow=3,
+        add_angle=False,
+        offset=True,
+        scaling=True,
+    ):
         """
         Disentangled classification using an LLM
         In addition, the entangled classification (master) is performed as well.
@@ -72,7 +88,15 @@ class Solver_pred(Solver):
 
         ret = []
         # initialize the RPM sample
-        rpm = RPM(sample, config, n=n, nshow=nshow, add_angle=add_angle)
+        rpm = RPM(
+            sample,
+            config,
+            n=n,
+            nshow=nshow,
+            add_angle=add_angle,
+            offset=offset,
+            scaling=scaling,
+        )
         for i, component in enumerate(rpm.components):
 
             ret.append({})
@@ -81,7 +105,15 @@ class Solver_pred(Solver):
                 # extract incontext examples
                 incontext = ""
                 for ex_idx, sa in enumerate(incontext_samples):
-                    ic_rpm = RPM(sa, config, n=n, nshow=nshow, add_angle=add_angle)
+                    ic_rpm = RPM(
+                        sa,
+                        config,
+                        n=n,
+                        nshow=nshow,
+                        add_angle=add_angle,
+                        offset=offset,
+                        scaling=scaling,
+                    )
                     incontext += (
                         "Example {:}:\n".format(ex_idx)
                         + ic_rpm.components[i].branches[j].context
@@ -101,21 +133,50 @@ class Solver_pred(Solver):
 
                 ret[i][j] = interaction
 
-            # Scale representations for later comparison
-            choices = scale_rep(text2num(rpm.choices, self.cfg.data.nattr, 8))
+            # extract choice values on master
+            choices = text2num(rpm.choices, self.cfg.data.nattr, 8)
+            if scaling:
+                choices = scale_rep(choices)
 
         return ret, choices
 
-    def _merge(self, sample, config, incontext_samples, n=3, nshow=3, add_angle=False):
+    def _merge(
+        self,
+        sample,
+        config,
+        incontext_samples,
+        n=3,
+        nshow=3,
+        add_angle=False,
+        offset=True,
+        scaling=True,
+        **kwargs
+    ):
         """
         Perform entangled classification only
         """
-        rpm = RPM(sample, config, n=n, nshow=nshow, add_angle=add_angle)
+        rpm = RPM(
+            sample,
+            config,
+            n=n,
+            nshow=nshow,
+            add_angle=add_angle,
+            offset=offset,
+            scaling=scaling,
+        )
 
         # Extract incontext info
         incontext = ""
         for ex_idx, sa in enumerate(incontext_samples):
-            ic_rpm = RPM(sa, config, n=n, nshow=nshow, add_angle=add_angle)
+            ic_rpm = RPM(
+                sa,
+                config,
+                n=n,
+                nshow=nshow,
+                add_angle=add_angle,
+                offset=offset,
+                scaling=scaling,
+            )
             incontext += (
                 "Example {:}:\n".format(ex_idx)
                 + ic_rpm.context
@@ -129,12 +190,14 @@ class Solver_pred(Solver):
 
         scores = self.model.forward(self.prompt, query)
 
-        # Scale representations for later comparison
-        choices = scale_rep(text2num(rpm.choices, self.cfg.data.nattr, 8))
+        # extract anser candidates
+        choices = text2num(rpm.choices, self.cfg.data.nattr, 8)
+        if scaling:
+            choices = scale_rep(choices)
 
         return scores, choices
 
-    def _predict(self, x, disentangled, choice_array):
+    def _predict(self, x, disentangled, choice_array, answer_queue="", scaling=True):
         """
         Predict the attributes based on textual output of LLM (x)
         """
@@ -142,18 +205,25 @@ class Solver_pred(Solver):
             ensemble_pred = np.zeros((self.cfg.model.nreturn, 0))
             for comp_dict in x:
                 for branch_name, branch_dict in comp_dict.items():
+
                     if branch_name == "master":
-                        master_pred = scale_rep(
-                            text2num(
-                                branch_dict["out"],
-                                self.cfg.data.nattr,
-                                self.cfg.model.nreturn,
-                            )
+                        master_pred = text2num(
+                            branch_dict["out"],
+                            self.cfg.data.nattr,
+                            self.cfg.model.nreturn,
+                            answer_queue,
                         )
+                        if scaling:
+                            master_pred = scale_rep(master_pred)
                     else:
                         ensemble_pred = np.append(
                             ensemble_pred,
-                            text2num(branch_dict["out"], 1, self.cfg.model.nreturn),
+                            text2num(
+                                branch_dict["out"],
+                                1,
+                                self.cfg.model.nreturn,
+                                answer_queue,
+                            ),
                             axis=-1,
                         )
             # master prediction (entangled)
@@ -171,9 +241,11 @@ class Solver_pred(Solver):
             ]
         else:
             # Only entangled prediction
-            pred_array = scale_rep(
-                text2num(x, self.cfg.data.nattr, self.cfg.model.nreturn)
+            pred_array = text2num(
+                x["out"], self.cfg.data.nattr, self.cfg.model.nreturn, answer_queue
             )
+            if scaling:
+                pred_array = scale_rep(pred_array)
             pred_array_maj = majority_vote(pred_array)
             pred_sol = find_best_match(choice_array, pred_array_maj)
 

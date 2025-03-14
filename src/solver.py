@@ -2,8 +2,8 @@
 # Copyright 2024- IBM Inc. All rights reserved
 # SPDX-License-Identifier: Apache2.0
 #
-
 import json
+import os
 
 import numpy as np
 from tqdm import tqdm
@@ -31,6 +31,35 @@ class Solver:
         - evaluation
         """
 
+        ####### Catch all the exceptions for wrong settings #############
+        if self.cfg.data.ood_set_attr:
+            raise ValueError("OOD not implemented yet")
+
+        # General check for center single
+        if "center_single" not in self.cfg.data.config:
+            if self.cfg.model.classmode == "pred":
+                raise ValueError(
+                    "Predictive mode not suported for larger grids beyond center"
+                )
+            if self.cfg.model.disentangled:
+                raise ValueError(
+                    "Disentangled operation not implemented for larger grids beyond center"
+                )
+
+        # Confounders check
+        if (
+            self.cfg.model.disentangled or self.cfg.model.classmode == "pred"
+        ) and self.cfg.data.nconf > 1:
+            raise ValueError("Confounders are only for entangled discriminative mode")
+
+        # Uncertainty check
+        if (
+            self.cfg.model.disentangled or self.cfg.model.classmode == "pred"
+        ) and self.cfg.data.uncertainty is not None:
+            raise ValueError("Uncertainty is only for disentangled discriminative mode")
+        ##################################################################################
+
+        # Load dataset
         with open(
             "{}/{}.json".format(self.cfg.data.path, self.cfg.data.config), "r"
         ) as f:
@@ -38,74 +67,100 @@ class Solver:
 
         acc = np.zeros((2))
 
-        if self.cfg.data.dataset == "iraven" or self.cfg.data.dataset == "iravenx":
-            subset = np.random.permutation(np.arange(8000, 10000))  #
-            incontext_subset = np.random.permutation(np.arange(6000))
+        subset = np.random.permutation(np.arange(8000, 10000))  # Test set
+        incontext_subset = np.random.permutation(
+            np.arange(6000)
+        )  # Training set (for incontext examples)
 
-        elif self.cfg.data.dataset == "ravenvariations":
-            subset = [int(i) for i in samples.keys()]
-            incontext_subset = subset
-
-        # OOD filtering
-        if self.cfg.data.ood_set_attr:
-            raise ValueError("OOD not implemented yet")
+        # Load file for saving results (if already partly done)
+        file_name = "{:}/result.json".format(self.cfg.path.full)
+        if os.path.exists(file_name):
+            with open(file_name, "r") as f:
+                self.output = json.load(f)
+        else:
+            print("No previous results loaded")
 
         pbar = tqdm(subset[: self.cfg.data.ntest])
         for j, i in enumerate(pbar):
+            newprediction = True
+            if str(i) in self.output:
+                if self.output[str(i)]["interaction"]["out"][0] != "empty":
+                    newprediction = False
+                    acc += np.array(self.output[str(i)]["correct"])
+                    acc_print = acc / (j + 1)
 
-            test_sample = samples[str(i)]
-            incontext_samples = self._getincontext(
-                test_sample, samples, np.random.permutation(incontext_subset)
-            )
-
-            # Interaction with LLM
-            if self.cfg.model.disentangled:  # do split predictions
-                interaction, choices = self._split(
-                    test_sample,
-                    self.cfg.data.config,
-                    incontext_samples,
-                    n=self.cfg.data.gridsize,
-                    nshow=self.cfg.data.nshow,
-                    add_angle=self.cfg.data.angle,
-                )
-            else:  # do only coupled prediction (master)
-                interaction, choices = self._merge(
-                    test_sample,
-                    self.cfg.data.config,
-                    incontext_samples,
-                    n=self.cfg.data.gridsize,
-                    nshow=self.cfg.data.nshow,
-                    add_angle=self.cfg.data.angle,
+            if newprediction:  # make a new predcition
+                test_sample = samples[str(i)]
+                incontext_samples = self._getincontext(
+                    test_sample, samples, np.random.permutation(incontext_subset)
                 )
 
-            # Determine the predicted panel based on text interaction
-            pred_sol, pred_attr = self._predict(
-                interaction, self.cfg.model.disentangled, choice_array=choices
-            )
+                # Interaction with LLM
+                if self.cfg.model.disentangled:  # do split predictions
+                    interaction, choices = self._split(
+                        test_sample,
+                        self.cfg.data.config,
+                        incontext_samples,
+                        n=self.cfg.data.gridsize,
+                        nshow=self.cfg.data.nshow,
+                        add_angle=self.cfg.data.angle,
+                        offset=self.cfg.data.offset,
+                        scaling=self.cfg.data.scaling,
+                    )
+                else:  # do only coupled prediction (master)
+                    interaction, choices = self._merge(
+                        test_sample,
+                        self.cfg.data.config,
+                        incontext_samples,
+                        n=self.cfg.data.gridsize,
+                        nshow=self.cfg.data.nshow,
+                        add_angle=self.cfg.data.angle,
+                        offset=self.cfg.data.offset,
+                        scaling=self.cfg.data.scaling,
+                        nconf=self.cfg.data.nconf,
+                        permutation=self.cfg.data.permutation,
+                        uncertainty=self.cfg.data.uncertainty,
+                        maxval_uncert=self.cfg.data.maxval_uncert,
+                    )
 
-            corr = self._get_correct(pred_sol, test_sample["target"])
+                # Determine the predicted panel based on text interaction
+                pred_sol, pred_attr = self._predict(
+                    interaction,
+                    self.cfg.model.disentangled,
+                    choice_array=choices,
+                    answer_queue=self.cfg.model.answer_queue,
+                    scaling=self.cfg.data.scaling,
+                )
 
-            acc += np.array(corr)
-            acc_print = acc / (j + 1)
-            self.output[str(i)] = {
-                "interaction": interaction,
-                "correct": corr,
-                "pred_sol": pred_sol,
-                "pred_attr": pred_attr,
-                "rules": test_sample["rules"],
-                "choices": choices.tolist(),
-                "target": test_sample["target"],
-            }
+                corr = self._get_correct(pred_sol, test_sample["target"])
+
+                acc += np.array(corr)
+                acc_print = acc / (j + 1)
+                self.output[str(i)] = {
+                    "interaction": interaction,
+                    "correct": corr,
+                    "pred_sol": pred_sol,
+                    "pred_attr": pred_attr,
+                    "rules": test_sample["rules"],
+                    "choices": choices.tolist(),
+                    "target": test_sample["target"],
+                }
+
+                # print(interaction)
 
             pbar.set_description(
                 "Merge {:.3f} Split {:.3f}".format(acc_print[0], acc_print[1])
             )
 
+            # Intermediate dump everything to JSON file
+            if self.cfg.model.name != "null":
+                json.dump(self.output, open(file_name, "w"), indent=1)
+
+        # Final accuracy computation
         self.output["acc_merge"] = acc[0] / self.cfg.data.ntest
         self.output["acc_split"] = acc[1] / self.cfg.data.ntest
 
-        # Dump everything to JSON file
-        file_name = "{:}/result.json".format(self.cfg.path.full)
+        # Final dump to JSON file
         if self.cfg.model.name != "null":
             json.dump(self.output, open(file_name, "w"), indent=1)
             self.output, self.context = {}, None
@@ -162,28 +217,3 @@ class Solver:
 
     def _get_correct(self, pred, sol):
         return int(int(sol) == int(pred[0])), int(int(sol) == int(pred[1]))
-
-    def _filter_ood(self, samples, subset, ood_set_attr, ood_set_rule):
-        """
-        OOD filtering -> not used ATM
-        """
-        for idx in subset:
-            if samples[str(idx)]["rules"][0][ood_set_attr] != ood_set_rule:
-                subset = np.delete(subset, np.where(subset == idx))
-
-        return subset, subset.shape[0]
-
-    def _filter_ood_train(self, samples, subset, ood_set_attr, ood_set_rule):
-        """
-        OOD training data filtering -> not used ATM
-        """
-        train_attr = ["Size", "Color", "Type"]
-        train_attr.remove(ood_set_attr)
-        out_subset = []
-        for tr_attr in train_attr:
-            for idx in subset:
-                if (samples[str(idx)]["rules"][0][ood_set_attr] != ood_set_rule) and (
-                    samples[str(idx)]["rules"][0][tr_attr] == ood_set_rule
-                ):
-                    out_subset.append(idx)
-        return np.array(out_subset)

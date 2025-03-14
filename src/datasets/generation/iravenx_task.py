@@ -1,10 +1,10 @@
 #
-# Copyright 2024- IBM Inc. All rights reserved
+# Copyright 2025- IBM Inc. All rights reserved
 # SPDX-License-Identifier: Apache2.0
 #
-
 import argparse
 import json
+import os
 import random
 import sys
 
@@ -123,15 +123,27 @@ def Progression(n, maxval=50, *kwargs):
     return context
 
 
+def non_repeating_list(n, maxval):
+    # resultant random numbers list
+    randomList = []
+    # traversing the loop until list is full
+    while len(randomList) < n:
+        r = random.randint(LOWVAL, maxval)
+        # checking whether the generated random number is not in the
+        # randomList
+        if r not in randomList:
+            # appending the random number to the resultant list, if the condition is true
+            randomList.append(r)
+    return np.array(randomList)
+
+
 def Distribute_Three(n, maxval=50, *kwargs):
     """
     Generate context matrix for distribute-three rule
     For n>3, the rule is interpreted as distribute-n with cyclic permutations
     """
     context = np.zeros((n, n))
-    arr = np.arange(LOWVAL, maxval)
-    np.random.shuffle(arr)
-    context[0, :] = arr[:n]
+    context[0, :] = non_repeating_list(n, maxval)
     delta = random.choice([-1, 1])
 
     for row in range(1, n):
@@ -168,6 +180,17 @@ def Arithmetic(n, maxval=50, arithmetic_strategy="shuffle"):
     return context
 
 
+def sample_arithmetic(n, maxval):
+
+    context = np.zeros(n)
+    target_sum = np.random.randint(low=maxval / 2, high=maxval)
+    curr_maxval = target_sum + 1
+    for col in range(n):
+        context[col] = np.random.randint(low=LOWVAL, high=curr_maxval)
+        curr_maxval = target_sum - np.sum(context) + 1
+    return context
+
+
 def generate_arithmetic_shuffle(n, maxval):
     """
     Iterative sampling for generating context of arithmetic
@@ -176,11 +199,8 @@ def generate_arithmetic_shuffle(n, maxval):
     context = np.zeros((n, n - 1))
 
     for row in range(n):
-        target_sum = np.random.randint(low=maxval / 2, high=maxval)
-        curr_maxval = target_sum + 1
-        for col in range(n - 1):
-            context[row, col] = np.random.randint(low=LOWVAL, high=curr_maxval)
-            curr_maxval = target_sum - np.sum(context[row, :]) + 1
+        while np.sum(context[row]) == 0:
+            context[row] = sample_arithmetic(n - 1, maxval)
 
     # randomly shuffle along the rows
     rng = np.random.default_rng()
@@ -204,6 +224,20 @@ def set_seeds(seed: int):
     random.seed(seed)
 
 
+def add_confounder(sample, n, maxval, nconf):
+    rpm = sample["rpm"]
+    for panel in range(n**2 + 7):
+        ent_dict = rpm[panel][0]
+
+        for conf in range(nconf):
+            ent_dict["Confounder" + str(conf)] = str(
+                int(np.random.randint(low=LOWVAL, high=maxval))
+            )
+
+        sample["rpm"][panel] = [ent_dict]
+    return sample
+
+
 def get_sample(n, maxval, rule, arithmetic_strategy):
     rpm = []
 
@@ -218,7 +252,7 @@ def get_sample(n, maxval, rule, arithmetic_strategy):
         rules["Color"] = random.choice(
             ["Constant", "Progression", "Distribute_Three", "Arithmetic"]
         )
-    else:
+    else:  # This is manual rule
         rules["Type"] = rule
         rules["Size"] = rule
         rules["Color"] = rule
@@ -233,12 +267,9 @@ def get_sample(n, maxval, rule, arithmetic_strategy):
         np.stack((type_val, size_val, color_val)), maxval, strategy="existent"
     )
 
+    size_val = np.concatenate([size_val.flatten()[:-1], candidates[:, 1]])
     type_val = np.concatenate([type_val.flatten()[:-1], candidates[:, 0]])
     color_val = np.concatenate([color_val.flatten()[:-1], candidates[:, 2]])
-
-    # decline size value by 1 since it is incremented by 1 in the dataloader
-    # (to be in line with the I-RAVEN representation)
-    size_val = np.concatenate([size_val.flatten()[:-1], candidates[:, 1]]) - 1
 
     rpm = []
     for panel in range(n**2 + 7):
@@ -246,19 +277,34 @@ def get_sample(n, maxval, rule, arithmetic_strategy):
         ent_dict["Type"] = str(int(type_val[panel]))
         ent_dict["Size"] = str(int(size_val[panel]))
         ent_dict["Color"] = str(int(color_val[panel]))
-        ent_dict["Angle"] = str(int(np.random.randint(low=LOWVAL, high=10)))
+        ent_dict["Angle"] = str(int(np.random.randint(low=LOWVAL, high=maxval)))
         rpm.append([ent_dict])
 
     return {"rules": [rules], "rpm": rpm, "target": target}
 
 
-def generate(n, maxval, save_dir, rule, arithmetic_strategy):
-    samples = {}
-    for i in tqdm(range(10000)):
-        samples[i] = get_sample(n, maxval, rule, arithmetic_strategy)
+def generate(n, maxval, save_dir, rule, arithmetic_strategy, nconf, load_file):
 
-    save_fn = "{}/center_single{}_{}_n_{}_maxval_{}.json".format(
-        save_dir, rule, arithmetic_strategy, n, maxval
+    if os.path.exists(load_file):
+        # load file (in case of just adding confounders)
+        with open(load_file, "r") as f:
+            samples = json.load(f)
+    else:
+        # generate new samples
+        samples = {}
+        for i in tqdm(range(10000)):
+            samples[i] = get_sample(n, maxval, rule, arithmetic_strategy)
+
+    # generate confounders if needed
+    if nconf > 0:
+        nconf_str = "_nconf_{}".format(nconf)
+        for i in tqdm(range(10000)):
+            samples[str(i)] = add_confounder(samples[str(i)], n, maxval, nconf)
+    else:
+        nconf_str = ""
+
+    save_fn = "{}/center_single{}_{}_n_{}_maxval_{}{}.json".format(
+        save_dir, rule, arithmetic_strategy, n, maxval, nconf_str
     )
     json.dump(samples, open(save_fn, "w"), indent=1, default=str)
     return
@@ -271,10 +317,20 @@ def main():
     parser.add_argument("--save_dir")
     parser.add_argument("--rule", type=str, default="")
     parser.add_argument("--arithmetic_strategy", type=str, default="shuffle")
+    parser.add_argument("--nconf", type=int, default=1)
+    parser.add_argument("--load_file", type=str, default="")
     args = parser.parse_args()
 
     set_seeds(1234)
-    generate(args.n, args.maxval, args.save_dir, args.rule, args.arithmetic_strategy)
+    generate(
+        args.n,
+        args.maxval,
+        args.save_dir,
+        args.rule,
+        args.arithmetic_strategy,
+        args.nconf,
+        args.load_file,
+    )
     return
 
 

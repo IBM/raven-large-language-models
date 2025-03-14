@@ -21,5 +21,5 @@ python src/datasets/generation/iraven_task.py --config center_single --load_dir 
 ## Generate the dataset
 Run the rule preprocessing script:
 ```bash
-python src/datasets/generation/iravenx_task.py --n 10 --maxval 1000 --save_dir data
+python src/datasets/generation/iravenx_task.py --n 10 --maxval 1000 --nconf 10 --save_dir data
 ```
