@@ -1,7 +1,7 @@
 # I-RAVEN-X
 
 This repository contains the generation of the I-RAVEN-X dataset as well as the LLM and LRM experiments of the two papers:
-### Giacomo Camposampiero*, Michael Hersche*, Roger Wattenhofer, Abu Sebastian and Abbas Rahimi, "Can Large Reasoning Models do Analogical Reasoning under Perceptual Uncertainty?" [[Preprint]]()
+### Giacomo Camposampiero*, Michael Hersche*, Roger Wattenhofer, Abu Sebastian and Abbas Rahimi, "Can Large Reasoning Models do Analogical Reasoning under Perceptual Uncertainty?" [[Preprint]](https://arxiv.org/abs/2503.11207)
 ### Michael Hersche, Giacomo Camposampiero, Roger Wattenhofer, Abu Sebastian and Abbas Rahimi, "Towards Learning to Reason: Comparing LLMs with Neuro-Symbolic on Arithmetic Relations in Abstract Reasoning" [[NEURMAD workshop at AAAI'2025]](https://openreview.net/pdf?id=F90YO0MacL)
 
 
@@ -91,18 +91,18 @@ python main.py --data-cfg configs/datasets/iravenx.yml --model-cfg configs/model
 ## Citation 📚
 If you use the work released here for your research, please consider citing our papers:
 ```
-@article{hersche2024_rpm_lrm,
+@article{camposampiero2025_lrm_uncertainty,
   title={Can Large Reasoning Models do Analogical Reasoning under Perceptual Uncertainty?},
   author={Camposampiero, Giacomo and Hersche, Michael and Wattenhofer, Roger and Sebastian, Abu and Rahimi, Abbas},
-  journal={arXiv preprint arXiv:XXXX.XXXXX},
+  journal={arXiv preprint arXiv:2503.11207},
   year={2025}
 }
 
-@inproceedings{hersche2024_rpm_llm_nesy,
+@inproceedings{hersche2025_rpm_llm_nesy,
   title = {Towards {Learning} to {Reason}: {Comparing} {LLMs} with {Neuro}-{Symbolic} on {Arithmetic} {Relations} in {Abstract} {Reasoning}},
   author={Hersche, Michael and Camposampiero, Giacomo and Wattenhofer, Roger and Sebastian, Abu and Rahimi, Abbas},
   booktitle = {{AAAI} {Workshop} on {Neural} {Reasoning} and {Mathematical} {Discovery} -- {An} {Interdisciplinary} {Two}-{Way} {Street} ({NEURMAD})},
-  year={2024}
+  year={2025}
 }
 ```
 
