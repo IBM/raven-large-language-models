@@ -6,6 +6,12 @@ data:
   nshow: 3
   ntest: 500
   nattr: 3
+  offset: false
+  scaling: true
   angle: false
+  permutation:
+  uncertainty:
+  maxval_uncert: 1000
+  nconf: 0
   ood_set_attr:
   ood_set_rule:

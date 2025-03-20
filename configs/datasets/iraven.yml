@@ -6,6 +6,13 @@ data:
   nattr: 3
   gridsize: 3
   nshow: 3
+  offset: true
   angle: false
+  scaling: true
+  permutation:
+  uncertainty:
+  maxval_uncert:
+  nconf: 0
   ood_set_attr: #"Arithmetic" #"Distribute_Three"  "Constant"  "Progression"
   ood_set_rule: #"Size" #"Color" # "Type"
+ 
